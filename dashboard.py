@@ -5,6 +5,8 @@ import threading
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, redirect
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 
 from langgraph.graph import StateGraph, END
@@ -20,6 +22,13 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
 
 # in-memory storage
 pipeline_runs = {}
@@ -132,7 +141,14 @@ def dashboard():
     return render_template("index.html")
 
 
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify({"error": f"Rate limit exceeded: {e.description}"}), 429
+
+
 @app.route("/api/generate", methods=["POST"])
+@limiter.limit("3 per day")
+@limiter.limit("1 per minute")
 def api_generate():
     data = request.json
     task = data.get("task", "").strip()
