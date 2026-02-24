@@ -5,8 +5,6 @@ import threading
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, redirect
 from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 
 from langgraph.graph import StateGraph, END
@@ -22,12 +20,6 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
-
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-    storage_uri="memory://",
-)
 
 # in-memory storage
 pipeline_runs = {}
@@ -140,15 +132,33 @@ def dashboard():
     return render_template("index.html")
 
 
-@app.errorhandler(429)
-def ratelimit_handler(e):
-    return jsonify({"error": f"Rate limit exceeded: {e.description}"}), 429
+# Custom rate limiter to avoid Gunicorn thread crashes
+rate_limits = {}
 
+def check_rate_limit(ip):
+    now = datetime.now()
+    if ip not in rate_limits:
+        rate_limits[ip] = []
+    
+    # keep only requests from the last 24 hours (86400 seconds)
+    rate_limits[ip] = [t for t in rate_limits[ip] if (now - t).total_seconds() < 86400]
+    
+    if len(rate_limits[ip]) >= 3:
+        return "Rate limit exceeded: 3 per 1 day"
+        
+    if rate_limits[ip] and (now - rate_limits[ip][-1]).total_seconds() < 60:
+        return "Rate limit exceeded: 1 per 1 minute"
+        
+    rate_limits[ip].append(now)
+    return None
 
 @app.route("/api/generate", methods=["POST"])
-@limiter.limit("3 per day")
-@limiter.limit("1 per minute")
 def api_generate():
+    client_ip = request.remote_addr
+    limit_error = check_rate_limit(client_ip)
+    if limit_error:
+        return jsonify({"error": limit_error}), 429
+
     data = request.json
     task = data.get("task", "").strip()
 
