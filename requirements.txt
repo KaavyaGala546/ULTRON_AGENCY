@@ -5,6 +5,6 @@ gunicorn
 langgraph
 langchain-groq
 langchain-community
-duckduckgo-search==5.3.1
+googlesearch-python
 APScheduler
 python-telegram-bot

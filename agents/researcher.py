@@ -2,9 +2,15 @@ from config import llm
 from utils.state import AgentState
 from utils.helpers import log_agent_action, create_error_message, validate_state_field
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_community.tools import DuckDuckGoSearchRun
+from googlesearch import search
 
-search_tool = DuckDuckGoSearchRun()
+def wrapped_search(query: str) -> str:
+    try:
+        # Fetch top 3 results with descriptions
+        results = search(query, num_results=3, advanced=True)
+        return "\n".join([f"- {r.title}: {r.description}" for r in results])
+    except Exception as e:
+        return f"Error performing search: {e}"
 
 def researcher_agent(state: AgentState) -> AgentState:
     log_agent_action("researcher", "Starting research phase")
@@ -80,23 +86,24 @@ def _search_for_context(task: str, company_info: str) -> str:
 
     try:
         query1 = f"Telegram channel marketing trends {company_info[:50]}"
-        result1 = search_tool.run(query1)
+        result1 = wrapped_search(query1)
         search_results += f"SEARCH 1 - Industry Trends:\n{result1}\n\n"
     except Exception as e:
         search_results += f"SEARCH 1 failed: {str(e)}\n\n"
 
     try:
         query2 = f"best Telegram content strategies {task[:50]}"
-        result2 = search_tool.run(query2)
+        result2 = wrapped_search(query2)
         search_results += f"SEARCH 2 - Content Strategies:\n{result2}\n\n"
     except Exception as e:
         search_results += f"SEARCH 2 failed: {str(e)}\n\n"
 
     try:
         query3 = f"Telegram channel engagement tips {company_info[:30]} 2024"
-        result3 = search_tool.run(query3)
+        result3 = wrapped_search(query3)
         search_results += f"SEARCH 3 - Engagement Tips:\n{result3}\n\n"
     except Exception as e:
         search_results += f"SEARCH 3 failed: {str(e)}\n\n"
 
     return search_results if search_results else "No search results available."
+    
