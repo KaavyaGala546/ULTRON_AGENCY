@@ -41,4 +41,13 @@ def send_telegram_message(text: str, parse_mode: str = "Markdown") -> dict:
         "parse_mode": parse_mode,
     }
     response = requests.post(url, json=payload)
-    return response.json()
+    result = response.json()
+
+    # if Markdown parsing fails, retry without formatting
+    if not result.get("ok") and "can't parse entities" in result.get("description", "").lower():
+        print(f"⚠️  Markdown parsing failed, retrying as plain text...")
+        payload.pop("parse_mode", None)
+        response = requests.post(url, json=payload)
+        result = response.json()
+
+    return result
